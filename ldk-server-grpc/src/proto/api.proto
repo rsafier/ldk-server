@@ -894,7 +894,28 @@ message DecodeOfferResponse {
 }
 
 // Subscribe to a stream of server events.
-message SubscribeEventsRequest {}
+message SubscribeEventsRequest {
+  // Optional event-kind filter. If empty, the server emits all event kinds
+  // EXCEPT EVENT_KIND_CHANNEL_COMMITMENT (which is opt-in because its rate
+  // can be much higher than the lifecycle / payment streams). Passing a
+  // non-empty list restricts the stream to those kinds (including
+  // EVENT_KIND_CHANNEL_COMMITMENT if explicitly requested).
+  repeated EventKind only = 1;
+}
+
+// Classes of events emitted on SubscribeEvents.
+enum EventKind {
+  EVENT_KIND_UNSPECIFIED = 0;
+  // PaymentReceived / PaymentSuccessful / PaymentFailed / PaymentClaimable /
+  // PaymentForwarded.
+  EVENT_KIND_PAYMENT = 1;
+  // ChannelPending / ChannelReady / ChannelClosed.
+  EVENT_KIND_CHANNEL_LIFECYCLE = 2;
+  // ChannelCommitmentUpdated — per-commitment attestation bundles.
+  // Excluded from the default subscription because a busy node can emit
+  // these many times per second.
+  EVENT_KIND_CHANNEL_COMMITMENT = 3;
+}
 
 service LightningNode {
   // Retrieve the latest node info.

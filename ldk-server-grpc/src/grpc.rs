@@ -748,7 +748,7 @@ mod tests {
 
 			let response = client
 				.server_streaming(
-					tonic::Request::new(crate::api::SubscribeEventsRequest {}),
+					tonic::Request::new(crate::api::SubscribeEventsRequest::default()),
 					grpc_path(SUBSCRIBE_EVENTS_PATH).parse().unwrap(),
 					tonic::codec::ProstCodec::default(),
 				)
@@ -776,7 +776,7 @@ mod tests {
 
 			let response = client
 				.server_streaming(
-					tonic::Request::new(crate::api::SubscribeEventsRequest {}),
+					tonic::Request::new(crate::api::SubscribeEventsRequest::default()),
 					grpc_path("SubscribeEventsError").parse().unwrap(),
 					tonic::codec::ProstCodec::default(),
 				)

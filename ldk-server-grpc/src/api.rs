@@ -1157,4 +1157,53 @@ pub struct DecodeOfferResponse {
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SubscribeEventsRequest {}
+pub struct SubscribeEventsRequest {
+	/// Optional event-kind filter. If empty, the server emits all event kinds
+	/// EXCEPT EVENT_KIND_CHANNEL_COMMITMENT (which is opt-in because its rate
+	/// can be much higher than the lifecycle / payment streams). Passing a
+	/// non-empty list restricts the stream to those kinds (including
+	/// EVENT_KIND_CHANNEL_COMMITMENT if explicitly requested).
+	#[prost(enumeration = "EventKind", repeated, tag = "1")]
+	pub only: ::prost::alloc::vec::Vec<i32>,
+}
+/// Classes of events emitted on SubscribeEvents.
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum EventKind {
+	Unspecified = 0,
+	/// PaymentReceived / PaymentSuccessful / PaymentFailed / PaymentClaimable /
+	/// PaymentForwarded.
+	Payment = 1,
+	/// ChannelPending / ChannelReady / ChannelClosed.
+	ChannelLifecycle = 2,
+	/// ChannelCommitmentUpdated — per-commitment attestation bundles.
+	/// Excluded from the default subscription because a busy node can emit
+	/// these many times per second.
+	ChannelCommitment = 3,
+}
+impl EventKind {
+	/// String value of the enum field names used in the ProtoBuf definition.
+	///
+	/// The values are not transformed in any way and thus are considered stable
+	/// (if the ProtoBuf definition does not change) and safe for programmatic use.
+	pub fn as_str_name(&self) -> &'static str {
+		match self {
+			EventKind::Unspecified => "EVENT_KIND_UNSPECIFIED",
+			EventKind::Payment => "EVENT_KIND_PAYMENT",
+			EventKind::ChannelLifecycle => "EVENT_KIND_CHANNEL_LIFECYCLE",
+			EventKind::ChannelCommitment => "EVENT_KIND_CHANNEL_COMMITMENT",
+		}
+	}
+	/// Creates an enum from field names used in the ProtoBuf definition.
+	pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+		match value {
+			"EVENT_KIND_UNSPECIFIED" => Some(Self::Unspecified),
+			"EVENT_KIND_PAYMENT" => Some(Self::Payment),
+			"EVENT_KIND_CHANNEL_LIFECYCLE" => Some(Self::ChannelLifecycle),
+			"EVENT_KIND_CHANNEL_COMMITMENT" => Some(Self::ChannelCommitment),
+			_ => None,
+		}
+	}
+}
