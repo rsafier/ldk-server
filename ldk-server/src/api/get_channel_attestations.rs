@@ -33,17 +33,36 @@ pub(crate) async fn handle_get_channel_attestations_request(
 		.collect::<Result<Vec<_>, _>>()?;
 
 	let attestations: Vec<ChannelCommitmentUpdated> = if want.is_empty() {
-		context
-			.node
-			.list_channel_attestations()
-			.into_iter()
-			.map(attestation_to_proto)
-			.collect()
+		// Materialize per-channel so we can surface errors instead of silently
+		// dropping them (the filter_map(.ok()) in Node::list_channel_attestations
+		// makes debugging extraction bugs opaque).
+		let mut out = Vec::new();
+		for c in context.node.list_channels() {
+			match context.node.export_channel_attestation(&c.channel_id) {
+				Ok(att) => out.push(attestation_to_proto(att)),
+				Err(e) => log::warn!(
+					"export_channel_attestation({}) failed: {:?}",
+					c.channel_id.0.to_lower_hex_string(),
+					e
+				),
+			}
+		}
+		out
 	} else {
-		want.iter()
-			.filter_map(|cid| context.node.export_channel_attestation(cid).ok())
-			.map(attestation_to_proto)
-			.collect()
+		let mut out = Vec::new();
+		for cid in &want {
+			match context.node.export_channel_attestation(cid) {
+				Ok(att) => out.push(attestation_to_proto(att)),
+				Err(e) => {
+					return Err(LdkServerError::new(
+						LdkServerErrorCode::InternalServerError,
+						format!("export_channel_attestation failed for {}: {:?}",
+							cid.0.to_lower_hex_string(), e),
+					));
+				},
+			}
+		}
+		out
 	};
 
 	Ok(GetChannelAttestationsResponse { attestations })
