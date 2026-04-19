@@ -10,6 +10,12 @@ message EventEnvelope {
     PaymentFailed payment_failed = 4;
     PaymentForwarded payment_forwarded = 6;
     PaymentClaimable payment_claimable = 7;
+    // Channel-lifecycle events (RFC #134 parent scope).
+    ChannelPending channel_pending = 8;
+    ChannelReady channel_ready = 9;
+    ChannelClosed channel_closed = 10;
+    // Per-commitment-update event carrying the cryptographic attestation bundle.
+    ChannelCommitmentUpdated channel_commitment_updated = 11;
   }
 }
 
@@ -41,4 +47,95 @@ message PaymentClaimable {
 // PaymentForwarded indicates a payment was forwarded through the node.
 message PaymentForwarded {
   types.ForwardedPayment forwarded_payment = 1;
+}
+
+// ChannelPending indicates a new channel has been created and is awaiting
+// on-chain funding confirmation.
+message ChannelPending {
+  // Hex-encoded channel id.
+  string channel_id = 1;
+  // Hex-encoded user-assigned channel id (16 bytes).
+  string user_channel_id = 2;
+  // Pubkey of the counterparty node, hex-encoded.
+  string counterparty_node_id = 3;
+  // Funding outpoint (txid:vout) as observed on chain.
+  string funding_txid = 4;
+  uint32 funding_output_index = 5;
+}
+
+// ChannelReady indicates a channel has reached the confirmed / usable state.
+message ChannelReady {
+  string channel_id = 1;
+  string user_channel_id = 2;
+  // May be absent in edge cases (see ldk-node docs).
+  optional string counterparty_node_id = 3;
+}
+
+// ChannelClosed indicates a channel has been closed.
+message ChannelClosed {
+  string channel_id = 1;
+  string user_channel_id = 2;
+  optional string counterparty_node_id = 3;
+  // Free-form closure reason string as surfaced by ldk-node.
+  optional string reason = 4;
+}
+
+// ChannelCommitmentUpdated fires once per commitment-state update and carries
+// the cryptographic bundle an external attestor needs to verify channel state
+// against the counterparty's funding pubkey.
+//
+// See the RFC filed on ldk-server:
+//   "include commitment-bundle data on channel-state events (extends #134)"
+message ChannelCommitmentUpdated {
+  // Channel identity.
+  string channel_id = 1;
+  string counterparty_node_id = 2;
+  string funding_txid = 3;
+  uint32 funding_outnum = 4;
+
+  // Monotonic — increments with every new state.
+  uint64 commitment_number = 5;
+
+  // The cryptographic bundle the attestor cares about.
+  ChannelCommitmentBundle bundle = 6;
+}
+
+// ChannelCommitmentBundle is the verifiable per-channel-state payload.
+//
+// An external verifier reconstructs the BIP-143 sighash over
+// holder_commitment_tx using the 2-of-2 funding redeem script assembled from
+// holder_funding_pubkey / counterparty_funding_pubkey and verifies
+// counterparty_signature against counterparty_funding_pubkey. That closes
+// the loop independent of the operator.
+message ChannelCommitmentBundle {
+  // Raw wire-format unsigned commitment tx (no witnesses).
+  bytes holder_commitment_tx = 1;
+
+  // Counterparty's ECDSA signature over holder_commitment_tx (BIP-143
+  // sighash, SIGHASH_ALL). Receivers should try DER first and fall back to
+  // a 64-byte raw (r||s) encoding.
+  bytes counterparty_signature = 2;
+
+  // 33-byte compressed pubkeys of both funding-output participants.
+  bytes holder_funding_pubkey = 3;
+  bytes counterparty_funding_pubkey = 4;
+
+  uint64 capacity_sats = 5;
+  uint64 holder_balance_msat = 6;
+  uint64 counterparty_balance_msat = 7;
+  uint64 commit_fee_sats = 8;
+
+  repeated AttestationHtlc pending_htlcs = 9;
+
+  // Channel type marker, e.g. "anchors", "static_remotekey", "taproot".
+  string channel_type = 10;
+}
+
+// AttestationHtlc describes a single pending HTLC as recorded on the commitment.
+message AttestationHtlc {
+  // True if we sent this HTLC (offered), false if received.
+  bool offered = 1;
+  uint64 amount_msat = 2;
+  bytes payment_hash = 3;
+  uint32 cltv_expiry = 4;
 }

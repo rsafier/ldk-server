@@ -418,7 +418,8 @@ impl LdkServerClient {
 	///
 	/// Returns an [`EventStream`] that yields [`EventEnvelope`] messages as they arrive.
 	pub async fn subscribe_events(&self) -> Result<EventStream, LdkServerError> {
-		self.grpc_server_streaming(&SubscribeEventsRequest {}, SUBSCRIBE_EVENTS_PATH).await
+		self.grpc_server_streaming(&SubscribeEventsRequest::default(), SUBSCRIBE_EVENTS_PATH)
+			.await
 	}
 
 	/// Send a unary gRPC request and decode the response.
