@@ -38,6 +38,18 @@ stringify_enum_serializer!(serialize_payment_direction, crate::types::PaymentDir
 stringify_enum_serializer!(serialize_payment_status, crate::types::PaymentStatus);
 stringify_enum_serializer!(serialize_balance_source, crate::types::BalanceSource);
 
+/// Serializes `prost::bytes::Bytes` as a hex string.
+pub fn serialize_bytes_hex<S>(value: &bytes::Bytes, serializer: S) -> Result<S::Ok, S::Error>
+where
+	S: Serializer,
+{
+	let hex = value.iter().fold(String::with_capacity(value.len() * 2), |mut acc, b| {
+		let _ = write!(acc, "{b:02x}");
+		acc
+	});
+	serializer.serialize_str(&hex)
+}
+
 /// Serializes `Option<prost::bytes::Bytes>` as a hex string (or null).
 pub fn serialize_opt_bytes_hex<S>(
 	value: &Option<bytes::Bytes>, serializer: S,
