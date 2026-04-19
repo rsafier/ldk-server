@@ -34,7 +34,8 @@ use ldk_server_client::ldk_server_grpc::api::{
 	DecodeInvoiceRequest, DecodeInvoiceResponse, DecodeOfferRequest, DecodeOfferResponse,
 	DisconnectPeerRequest, DisconnectPeerResponse, ExportPathfindingScoresRequest,
 	ForceCloseChannelRequest, ForceCloseChannelResponse, GetBalancesRequest, GetBalancesResponse,
-	GetNodeInfoRequest, GetNodeInfoResponse, GetPaymentDetailsRequest, GetPaymentDetailsResponse,
+	GetChannelAttestationsRequest, GetChannelAttestationsResponse, GetNodeInfoRequest,
+	GetNodeInfoResponse, GetPaymentDetailsRequest, GetPaymentDetailsResponse,
 	GraphGetChannelRequest, GraphGetChannelResponse, GraphGetNodeRequest, GraphGetNodeResponse,
 	GraphListChannelsRequest, GraphListChannelsResponse, GraphListNodesRequest,
 	GraphListNodesResponse, ListChannelsRequest, ListChannelsResponse,
@@ -443,6 +444,16 @@ enum Commands {
 	},
 	#[command(about = "Return a list of known channels")]
 	ListChannels,
+	#[command(
+		about = "Return cryptographic attestation bundles for open channels (unsigned commit tx + counterparty sig + funding pubkeys)"
+	)]
+	GetChannelAttestations {
+		#[arg(
+			long,
+			help = "Hex channel_id (can be given multiple times). If omitted, all open channels."
+		)]
+		channel_id: Vec<String>,
+	},
 	#[command(about = "Retrieve list of all payments")]
 	ListPayments {
 		#[arg(short, long)]
@@ -983,6 +994,15 @@ async fn main() {
 		Commands::ListChannels => {
 			handle_response_result::<_, ListChannelsResponse>(
 				client.list_channels(ListChannelsRequest {}).await,
+			);
+		},
+		Commands::GetChannelAttestations { channel_id } => {
+			handle_response_result::<_, GetChannelAttestationsResponse>(
+				client
+					.get_channel_attestations(GetChannelAttestationsRequest {
+						channel_ids: channel_id,
+					})
+					.await,
 			);
 		},
 		Commands::ListPayments { number_of_payments, page_token } => {

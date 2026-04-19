@@ -893,6 +893,18 @@ message DecodeOfferResponse {
   bool is_expired = 12;
 }
 
+// Request a point-in-time attestation bundle for some or all channels.
+message GetChannelAttestationsRequest {
+  // Optional channel-id filter (hex-encoded). Empty = all channels.
+  repeated string channel_ids = 1;
+}
+
+// Response: one ChannelCommitmentUpdated per channel, carrying the full
+// cryptographic bundle populated by `Node::export_channel_attestation`.
+message GetChannelAttestationsResponse {
+  repeated events.ChannelCommitmentUpdated attestations = 1;
+}
+
 // Subscribe to a stream of server events.
 message SubscribeEventsRequest {
   // Optional event-kind filter. If empty, the server emits all event kinds
@@ -994,4 +1006,8 @@ service LightningNode {
   rpc GraphGetNode(GraphGetNodeRequest) returns (GraphGetNodeResponse);
   // Subscribe to a stream of server events.
   rpc SubscribeEvents(SubscribeEventsRequest) returns (stream events.EventEnvelope);
+  // Return point-in-time attestation bundles for every (or a filtered subset of)
+  // open channel. Used by external compliance tooling to assemble signed
+  // channel-state artifacts for regulators.
+  rpc GetChannelAttestations(GetChannelAttestationsRequest) returns (GetChannelAttestationsResponse);
 }

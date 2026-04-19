@@ -26,7 +26,8 @@ use ldk_server_grpc::endpoints::{
 	DISCONNECT_PEER_PATH, EXPORT_PATHFINDING_SCORES_PATH, FORCE_CLOSE_CHANNEL_PATH,
 	GET_BALANCES_PATH, GET_METRICS_PATH, GET_NODE_INFO_PATH, GET_PAYMENT_DETAILS_PATH,
 	GRAPH_GET_CHANNEL_PATH, GRAPH_GET_NODE_PATH, GRAPH_LIST_CHANNELS_PATH, GRAPH_LIST_NODES_PATH,
-	LIST_CHANNELS_PATH, LIST_FORWARDED_PAYMENTS_PATH, LIST_PAYMENTS_PATH, LIST_PEERS_PATH,
+	GET_CHANNEL_ATTESTATIONS_PATH, LIST_CHANNELS_PATH, LIST_FORWARDED_PAYMENTS_PATH,
+	LIST_PAYMENTS_PATH, LIST_PEERS_PATH,
 	ONCHAIN_RECEIVE_PATH, ONCHAIN_SEND_PATH, OPEN_CHANNEL_PATH, SIGN_MESSAGE_PATH, SPLICE_IN_PATH,
 	SPLICE_OUT_PATH, SPONTANEOUS_SEND_PATH, SUBSCRIBE_EVENTS_PATH, UNIFIED_SEND_PATH,
 	UPDATE_CHANNEL_CONFIG_PATH, VERIFY_SIGNATURE_PATH,
@@ -67,6 +68,7 @@ use crate::api::graph_get_channel::handle_graph_get_channel_request;
 use crate::api::graph_get_node::handle_graph_get_node_request;
 use crate::api::graph_list_channels::handle_graph_list_channels_request;
 use crate::api::graph_list_nodes::handle_graph_list_nodes_request;
+use crate::api::get_channel_attestations::handle_get_channel_attestations_request;
 use crate::api::list_channels::handle_list_channels_request;
 use crate::api::list_forwarded_payments::handle_list_forwarded_payments_request;
 use crate::api::list_payments::handle_list_payments_request;
@@ -310,6 +312,11 @@ impl Service<Request<Incoming>> for NodeService {
 			LIST_CHANNELS_PATH => {
 				Box::pin(handle_grpc_unary(context, req, handle_list_channels_request))
 			},
+			GET_CHANNEL_ATTESTATIONS_PATH => Box::pin(handle_grpc_unary(
+				context,
+				req,
+				handle_get_channel_attestations_request,
+			)),
 			UPDATE_CHANNEL_CONFIG_PATH => {
 				Box::pin(handle_grpc_unary(context, req, handle_update_channel_config_request))
 			},

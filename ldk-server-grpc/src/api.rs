@@ -1152,6 +1152,26 @@ pub struct DecodeOfferResponse {
 	#[prost(bool, tag = "12")]
 	pub is_expired: bool,
 }
+/// Request a point-in-time attestation bundle for some or all channels.
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetChannelAttestationsRequest {
+	/// Optional channel-id filter (hex-encoded). Empty = all channels.
+	#[prost(string, repeated, tag = "1")]
+	pub channel_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+/// Response: one ChannelCommitmentUpdated per channel, carrying the full
+/// cryptographic bundle populated by `Node::export_channel_attestation`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetChannelAttestationsResponse {
+	#[prost(message, repeated, tag = "1")]
+	pub attestations: ::prost::alloc::vec::Vec<super::events::ChannelCommitmentUpdated>,
+}
 /// Subscribe to a stream of server events.
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]

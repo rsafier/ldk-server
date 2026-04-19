@@ -30,6 +30,7 @@ pub const SPLICE_OUT_PATH: &str = "SpliceOut";
 pub const CLOSE_CHANNEL_PATH: &str = "CloseChannel";
 pub const FORCE_CLOSE_CHANNEL_PATH: &str = "ForceCloseChannel";
 pub const LIST_CHANNELS_PATH: &str = "ListChannels";
+pub const GET_CHANNEL_ATTESTATIONS_PATH: &str = "GetChannelAttestations";
 pub const LIST_PAYMENTS_PATH: &str = "ListPayments";
 pub const LIST_FORWARDED_PAYMENTS_PATH: &str = "ListForwardedPayments";
 pub const UPDATE_CHANNEL_CONFIG_PATH: &str = "UpdateChannelConfig";
