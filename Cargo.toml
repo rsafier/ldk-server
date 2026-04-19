@@ -10,3 +10,19 @@ lto = true
 
 [profile.dev]
 panic = "abort"
+
+# Redirect rust-lightning git deps transitively (through ldk-node) to our
+# fork that exposes ChannelMonitor::channel_keys_id.
+# See rsafier/rust-lightning branch rfc/channel-keys-id-accessor.
+[patch.'https://github.com/lightningdevkit/rust-lightning']
+lightning = { git = "https://github.com/rsafier/rust-lightning.git", branch = "rfc/channel-keys-id-accessor" }
+lightning-types = { git = "https://github.com/rsafier/rust-lightning.git", branch = "rfc/channel-keys-id-accessor" }
+lightning-invoice = { git = "https://github.com/rsafier/rust-lightning.git", branch = "rfc/channel-keys-id-accessor" }
+lightning-net-tokio = { git = "https://github.com/rsafier/rust-lightning.git", branch = "rfc/channel-keys-id-accessor" }
+lightning-persister = { git = "https://github.com/rsafier/rust-lightning.git", branch = "rfc/channel-keys-id-accessor" }
+lightning-background-processor = { git = "https://github.com/rsafier/rust-lightning.git", branch = "rfc/channel-keys-id-accessor" }
+lightning-rapid-gossip-sync = { git = "https://github.com/rsafier/rust-lightning.git", branch = "rfc/channel-keys-id-accessor" }
+lightning-block-sync = { git = "https://github.com/rsafier/rust-lightning.git", branch = "rfc/channel-keys-id-accessor" }
+lightning-transaction-sync = { git = "https://github.com/rsafier/rust-lightning.git", branch = "rfc/channel-keys-id-accessor" }
+lightning-liquidity = { git = "https://github.com/rsafier/rust-lightning.git", branch = "rfc/channel-keys-id-accessor" }
+lightning-macros = { git = "https://github.com/rsafier/rust-lightning.git", branch = "rfc/channel-keys-id-accessor" }

@@ -26,7 +26,8 @@ use ldk_server_grpc::api::{
 	DecodeInvoiceRequest, DecodeInvoiceResponse, DecodeOfferRequest, DecodeOfferResponse,
 	DisconnectPeerRequest, DisconnectPeerResponse, ExportPathfindingScoresRequest,
 	ExportPathfindingScoresResponse, ForceCloseChannelRequest, ForceCloseChannelResponse,
-	GetBalancesRequest, GetBalancesResponse, GetNodeInfoRequest, GetNodeInfoResponse,
+	GetBalancesRequest, GetBalancesResponse, GetChannelAttestationsRequest,
+	GetChannelAttestationsResponse, GetNodeInfoRequest, GetNodeInfoResponse,
 	GetPaymentDetailsRequest, GetPaymentDetailsResponse, GraphGetChannelRequest,
 	GraphGetChannelResponse, GraphGetNodeRequest, GraphGetNodeResponse, GraphListChannelsRequest,
 	GraphListChannelsResponse, GraphListNodesRequest, GraphListNodesResponse, ListChannelsRequest,
@@ -45,7 +46,8 @@ use ldk_server_grpc::endpoints::{
 	BOLT11_RECEIVE_VIA_JIT_CHANNEL_PATH, BOLT11_SEND_PATH, BOLT12_RECEIVE_PATH, BOLT12_SEND_PATH,
 	CLOSE_CHANNEL_PATH, CONNECT_PEER_PATH, DECODE_INVOICE_PATH, DECODE_OFFER_PATH,
 	DISCONNECT_PEER_PATH, EXPORT_PATHFINDING_SCORES_PATH, FORCE_CLOSE_CHANNEL_PATH,
-	GET_BALANCES_PATH, GET_METRICS_PATH, GET_NODE_INFO_PATH, GET_PAYMENT_DETAILS_PATH,
+	GET_BALANCES_PATH, GET_CHANNEL_ATTESTATIONS_PATH, GET_METRICS_PATH, GET_NODE_INFO_PATH,
+	GET_PAYMENT_DETAILS_PATH,
 	GRAPH_GET_CHANNEL_PATH, GRAPH_GET_NODE_PATH, GRAPH_LIST_CHANNELS_PATH, GRAPH_LIST_NODES_PATH,
 	GRPC_SERVICE_PREFIX, LIST_CHANNELS_PATH, LIST_FORWARDED_PAYMENTS_PATH, LIST_PAYMENTS_PATH,
 	LIST_PEERS_PATH, ONCHAIN_RECEIVE_PATH, ONCHAIN_SEND_PATH, OPEN_CHANNEL_PATH, SIGN_MESSAGE_PATH,
@@ -286,6 +288,14 @@ impl LdkServerClient {
 		&self, request: ListChannelsRequest,
 	) -> Result<ListChannelsResponse, LdkServerError> {
 		self.grpc_unary(&request, LIST_CHANNELS_PATH).await
+	}
+
+	/// Retrieve per-channel cryptographic attestation bundles (unsigned commit tx +
+	/// counterparty sig + both funding pubkeys + balances + pending HTLCs).
+	pub async fn get_channel_attestations(
+		&self, request: GetChannelAttestationsRequest,
+	) -> Result<GetChannelAttestationsResponse, LdkServerError> {
+		self.grpc_unary(&request, GET_CHANNEL_ATTESTATIONS_PATH).await
 	}
 
 	/// Retrieves list of all payments sent or received by us.
