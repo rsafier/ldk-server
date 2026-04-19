@@ -188,16 +188,20 @@ pub struct ChannelCommitmentUpdated {
 pub struct ChannelCommitmentBundle {
 	/// Raw wire-format unsigned commitment tx (no witnesses).
 	#[prost(bytes = "bytes", tag = "1")]
+	#[cfg_attr(feature = "serde", serde(serialize_with = "crate::serde_utils::serialize_bytes_hex"))]
 	pub holder_commitment_tx: ::prost::bytes::Bytes,
 	/// Counterparty's ECDSA signature over holder_commitment_tx (BIP-143
 	/// sighash, SIGHASH_ALL). Receivers should try DER first and fall back to
 	/// a 64-byte raw (r||s) encoding.
 	#[prost(bytes = "bytes", tag = "2")]
+	#[cfg_attr(feature = "serde", serde(serialize_with = "crate::serde_utils::serialize_bytes_hex"))]
 	pub counterparty_signature: ::prost::bytes::Bytes,
 	/// 33-byte compressed pubkeys of both funding-output participants.
 	#[prost(bytes = "bytes", tag = "3")]
+	#[cfg_attr(feature = "serde", serde(serialize_with = "crate::serde_utils::serialize_bytes_hex"))]
 	pub holder_funding_pubkey: ::prost::bytes::Bytes,
 	#[prost(bytes = "bytes", tag = "4")]
+	#[cfg_attr(feature = "serde", serde(serialize_with = "crate::serde_utils::serialize_bytes_hex"))]
 	pub counterparty_funding_pubkey: ::prost::bytes::Bytes,
 	#[prost(uint64, tag = "5")]
 	pub capacity_sats: u64,
@@ -225,6 +229,7 @@ pub struct AttestationHtlc {
 	#[prost(uint64, tag = "2")]
 	pub amount_msat: u64,
 	#[prost(bytes = "bytes", tag = "3")]
+	#[cfg_attr(feature = "serde", serde(serialize_with = "crate::serde_utils::serialize_bytes_hex"))]
 	pub payment_hash: ::prost::bytes::Bytes,
 	#[prost(uint32, tag = "4")]
 	pub cltv_expiry: u32,
