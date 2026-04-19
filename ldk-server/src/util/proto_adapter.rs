@@ -21,7 +21,9 @@ use ldk_node::lightning_invoice::{Bolt11InvoiceDescription, Description, Sha256}
 use ldk_node::payment::{
 	ConfirmationStatus, PaymentDetails, PaymentDirection, PaymentKind, PaymentStatus,
 };
-use ldk_node::{ChannelDetails, LightningBalance, PeerDetails, PendingSweepBalance, UserChannelId};
+use ldk_node::{
+	ChannelDetails, LightningBalance, Node, PeerDetails, PendingSweepBalance, UserChannelId,
+};
 use ldk_server_grpc::types::confirmation_status::Status::{Confirmed, Unconfirmed};
 use ldk_server_grpc::types::lightning_balance::BalanceType::{
 	ClaimableAwaitingConfirmations, ClaimableOnChannelClose, ContentiousClaimable,
@@ -33,12 +35,105 @@ use ldk_server_grpc::types::payment_kind::Kind::{
 use ldk_server_grpc::types::pending_sweep_balance::BalanceType::{
 	AwaitingThresholdConfirmations, BroadcastAwaitingConfirmation, PendingBroadcast,
 };
+use ldk_server_grpc::events::{
+	ChannelClosed, ChannelCommitmentBundle, ChannelCommitmentUpdated, ChannelPending, ChannelReady,
+};
 use ldk_server_grpc::types::{
 	bolt11_invoice_description, Channel, ForwardedPayment, LspFeeLimits, OutPoint, Payment, Peer,
 };
 
 use crate::api::error::LdkServerError;
 use crate::api::error::LdkServerErrorCode::InvalidRequestError;
+
+/// Build a ChannelPending event proto from ldk-node's `Event::ChannelPending` fields.
+pub(crate) fn channel_pending_event_to_proto(
+	channel_id: ChannelId, user_channel_id: UserChannelId, counterparty_node_id: PublicKey,
+	funding_txo: ldk_node::bitcoin::OutPoint,
+) -> ChannelPending {
+	ChannelPending {
+		channel_id: channel_id.0.to_lower_hex_string(),
+		user_channel_id: user_channel_id.0.to_string(),
+		counterparty_node_id: counterparty_node_id.to_string(),
+		funding_txid: funding_txo.txid.to_string(),
+		funding_output_index: funding_txo.vout,
+	}
+}
+
+/// Build a ChannelReady event proto.
+pub(crate) fn channel_ready_event_to_proto(
+	channel_id: ChannelId, user_channel_id: UserChannelId,
+	counterparty_node_id: Option<PublicKey>,
+) -> ChannelReady {
+	ChannelReady {
+		channel_id: channel_id.0.to_lower_hex_string(),
+		user_channel_id: user_channel_id.0.to_string(),
+		counterparty_node_id: counterparty_node_id.map(|p| p.to_string()),
+	}
+}
+
+/// Build a ChannelClosed event proto.
+pub(crate) fn channel_closed_event_to_proto(
+	channel_id: ChannelId, user_channel_id: UserChannelId,
+	counterparty_node_id: Option<PublicKey>, reason: Option<String>,
+) -> ChannelClosed {
+	ChannelClosed {
+		channel_id: channel_id.0.to_lower_hex_string(),
+		user_channel_id: user_channel_id.0.to_string(),
+		counterparty_node_id: counterparty_node_id.map(|p| p.to_string()),
+		reason,
+	}
+}
+
+/// Build a ChannelCommitmentUpdated event for the given `channel_id` by looking the
+/// channel up via `Node::list_channels()`.
+///
+/// Returns `None` if the channel is no longer tracked (e.g. it closed before the
+/// event handler ran).
+///
+/// NOTE: This is a best-effort implementation against the fields exposed by the
+/// current ldk-node API. The cryptographic bundle fields — holder_commitment_tx,
+/// counterparty_signature, and both funding pubkeys — are left empty pending the
+/// ldk-node RFC that adds `Node::export_channel_attestation()`. The companion
+/// RFC on ldk-server is explicit that those fields come from that API; until it
+/// lands, a consumer receives a correctly-shaped event with the metadata filled
+/// in and the crypto fields blank, and can detect the stub by checking that
+/// `holder_commitment_tx` is empty.
+///
+/// Balances use `outbound_capacity_msat` / `inbound_capacity_msat` as a proxy.
+/// The ldk-node RFC's `export_channel_attestation` will expose the commitment-
+/// derived balances directly; replacing this helper is the migration path.
+pub(crate) fn channel_commitment_event(
+	node: &Node, channel_id: ChannelId,
+) -> Option<ChannelCommitmentUpdated> {
+	let channel = node.list_channels().into_iter().find(|c| c.channel_id == channel_id)?;
+	let (funding_txid, funding_outnum) = match channel.funding_txo {
+		Some(o) => (o.txid.to_string(), o.vout),
+		None => (String::new(), 0),
+	};
+	let bundle = ChannelCommitmentBundle {
+		// TODO: populate from ldk-node `Node::export_channel_attestation()` once that
+		// API lands (RFC: "expose channel attestation data").
+		holder_commitment_tx: Bytes::new(),
+		counterparty_signature: Bytes::new(),
+		holder_funding_pubkey: Bytes::new(),
+		counterparty_funding_pubkey: Bytes::new(),
+		capacity_sats: channel.channel_value_sats,
+		holder_balance_msat: channel.outbound_capacity_msat,
+		counterparty_balance_msat: channel.inbound_capacity_msat,
+		commit_fee_sats: 0,
+		pending_htlcs: Vec::new(),
+		channel_type: String::new(),
+	};
+	Some(ChannelCommitmentUpdated {
+		channel_id: channel.channel_id.0.to_lower_hex_string(),
+		counterparty_node_id: channel.counterparty_node_id.to_string(),
+		funding_txid,
+		funding_outnum,
+		// TODO: use the ChannelMonitor commitment_number once exposed.
+		commitment_number: 0,
+		bundle: Some(bundle),
+	})
+}
 
 pub(crate) fn peer_to_proto(peer: PeerDetails) -> Peer {
 	Peer {
