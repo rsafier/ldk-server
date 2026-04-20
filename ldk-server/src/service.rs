@@ -26,12 +26,14 @@ use ldk_server_grpc::endpoints::{
 	DISCONNECT_PEER_PATH, EXPORT_PATHFINDING_SCORES_PATH, FORCE_CLOSE_CHANNEL_PATH,
 	GET_BALANCES_PATH, GET_METRICS_PATH, GET_NODE_INFO_PATH, GET_PAYMENT_DETAILS_PATH,
 	GRAPH_GET_CHANNEL_PATH, GRAPH_GET_NODE_PATH, GRAPH_LIST_CHANNELS_PATH, GRAPH_LIST_NODES_PATH,
-	LIST_CHANNELS_PATH, LIST_FORWARDED_PAYMENTS_PATH, LIST_PAYMENTS_PATH, LIST_PEERS_PATH,
+	GET_CHANNEL_ATTESTATIONS_PATH, LIST_CHANNELS_PATH, LIST_FORWARDED_PAYMENTS_PATH,
+	LIST_PAYMENTS_PATH, LIST_PEERS_PATH,
 	ONCHAIN_RECEIVE_PATH, ONCHAIN_SEND_PATH, OPEN_CHANNEL_PATH, SIGN_MESSAGE_PATH, SPLICE_IN_PATH,
 	SPLICE_OUT_PATH, SPONTANEOUS_SEND_PATH, SUBSCRIBE_EVENTS_PATH, UNIFIED_SEND_PATH,
 	UPDATE_CHANNEL_CONFIG_PATH, VERIFY_SIGNATURE_PATH,
 };
-use ldk_server_grpc::events::EventEnvelope;
+use ldk_server_grpc::api::{EventKind, SubscribeEventsRequest};
+use ldk_server_grpc::events::{event_envelope, EventEnvelope};
 use ldk_server_grpc::grpc::{
 	decode_grpc_body, encode_grpc_frame, grpc_error_response, grpc_response, parse_grpc_timeout,
 	validate_grpc_request, GrpcBody, GrpcStatus, GRPC_STATUS_DEADLINE_EXCEEDED,
@@ -66,6 +68,7 @@ use crate::api::graph_get_channel::handle_graph_get_channel_request;
 use crate::api::graph_get_node::handle_graph_get_node_request;
 use crate::api::graph_list_channels::handle_graph_list_channels_request;
 use crate::api::graph_list_nodes::handle_graph_list_nodes_request;
+use crate::api::get_channel_attestations::handle_get_channel_attestations_request;
 use crate::api::list_channels::handle_list_channels_request;
 use crate::api::list_forwarded_payments::handle_list_forwarded_payments_request;
 use crate::api::list_payments::handle_list_payments_request;
@@ -309,6 +312,11 @@ impl Service<Request<Incoming>> for NodeService {
 			LIST_CHANNELS_PATH => {
 				Box::pin(handle_grpc_unary(context, req, handle_list_channels_request))
 			},
+			GET_CHANNEL_ATTESTATIONS_PATH => Box::pin(handle_grpc_unary(
+				context,
+				req,
+				handle_get_channel_attestations_request,
+			)),
 			UPDATE_CHANNEL_CONFIG_PATH => {
 				Box::pin(handle_grpc_unary(context, req, handle_update_channel_config_request))
 			},
@@ -363,6 +371,27 @@ impl Service<Request<Incoming>> for NodeService {
 				let event_sender = self.event_sender.clone();
 				let mut shutdown_rx = self.shutdown_rx.clone();
 				Box::pin(async move {
+					// Read the client's SubscribeEventsRequest before starting the stream so we
+					// can honor its event-kind filter.
+					let limited_body = Limited::new(req.into_body(), MAX_BODY_SIZE);
+					let bytes = match limited_body.collect().await {
+						Ok(collected) => collected.to_bytes(),
+						Err(_) => {
+							return Ok(grpc_error_response(GrpcStatus::new(
+								GRPC_STATUS_INVALID_ARGUMENT,
+								"Request body too large or failed to read",
+							)));
+						},
+					};
+					let subscribe_req = match decode_grpc_body(&bytes)
+						.and_then(|b| SubscribeEventsRequest::decode(b).map_err(|_| {
+							GrpcStatus::new(GRPC_STATUS_INVALID_ARGUMENT, "Malformed request")
+						})) {
+						Ok(r) => r,
+						Err(status) => return Ok(grpc_error_response(status)),
+					};
+					let filter = EventFilter::from_request(&subscribe_req);
+
 					let mut rx = event_sender.subscribe();
 					let (tx, mpsc_rx) = mpsc::channel::<Result<bytes::Bytes, GrpcStatus>>(64);
 					tokio::spawn(async move {
@@ -381,6 +410,9 @@ impl Service<Request<Incoming>> for NodeService {
 								result = rx.recv() => {
 									match result {
 										Ok(event) => {
+											if !filter.permits(&event) {
+												continue;
+											}
 											let frame = encode_grpc_frame(&event.encode_to_vec());
 											if tx.send(Ok(frame)).await.is_err() {
 												break; // client disconnected
@@ -475,6 +507,70 @@ async fn handle_grpc_unary<
 	}
 }
 
+/// Event-kind filter for `SubscribeEvents`.
+///
+/// If the caller passes a non-empty `only` list, the stream is restricted
+/// to exactly those kinds. If `only` is empty, the stream emits every kind
+/// *except* `EVENT_KIND_CHANNEL_COMMITMENT` — commitment bundles fire per
+/// state update and are opt-in to avoid surprising existing subscribers.
+struct EventFilter {
+	allow_payment: bool,
+	allow_channel_lifecycle: bool,
+	allow_channel_commitment: bool,
+}
+
+impl EventFilter {
+	fn from_request(req: &SubscribeEventsRequest) -> Self {
+		if req.only.is_empty() {
+			return Self {
+				allow_payment: true,
+				allow_channel_lifecycle: true,
+				allow_channel_commitment: false,
+			};
+		}
+		let mut f = Self {
+			allow_payment: false,
+			allow_channel_lifecycle: false,
+			allow_channel_commitment: false,
+		};
+		for kind in &req.only {
+			match EventKind::from_i32(*kind).unwrap_or(EventKind::Unspecified) {
+				EventKind::Payment => f.allow_payment = true,
+				EventKind::ChannelLifecycle => f.allow_channel_lifecycle = true,
+				EventKind::ChannelCommitment => f.allow_channel_commitment = true,
+				EventKind::Unspecified => {},
+			}
+		}
+		f
+	}
+
+	fn permits(&self, envelope: &EventEnvelope) -> bool {
+		match classify(envelope) {
+			Some(EventKind::Payment) => self.allow_payment,
+			Some(EventKind::ChannelLifecycle) => self.allow_channel_lifecycle,
+			Some(EventKind::ChannelCommitment) => self.allow_channel_commitment,
+			// Unknown / new event kinds default to allowed — the server shouldn't silently
+			// drop events a client is running a newer proto against.
+			_ => true,
+		}
+	}
+}
+
+fn classify(envelope: &EventEnvelope) -> Option<EventKind> {
+	use event_envelope::Event;
+	match envelope.event.as_ref()? {
+		Event::PaymentReceived(_)
+		| Event::PaymentSuccessful(_)
+		| Event::PaymentFailed(_)
+		| Event::PaymentForwarded(_)
+		| Event::PaymentClaimable(_) => Some(EventKind::Payment),
+		Event::ChannelPending(_) | Event::ChannelReady(_) | Event::ChannelClosed(_) => {
+			Some(EventKind::ChannelLifecycle)
+		},
+		Event::ChannelCommitmentUpdated(_) => Some(EventKind::ChannelCommitment),
+	}
+}
+
 /// Map an `LdkServerError` to a `GrpcStatus`.
 pub(crate) fn ldk_error_to_grpc_status(e: LdkServerError) -> GrpcStatus {
 	let code = match e.error_code {
@@ -556,5 +652,68 @@ mod tests {
 		let result = validate_auth(&req, "test_api_key");
 		assert!(result.is_err());
 		assert_eq!(result.unwrap_err().error_code, LdkServerErrorCode::AuthError);
+	}
+
+	fn env(event: event_envelope::Event) -> EventEnvelope {
+		EventEnvelope { event: Some(event) }
+	}
+
+	fn payment_event() -> EventEnvelope {
+		env(event_envelope::Event::PaymentReceived(ldk_server_grpc::events::PaymentReceived {
+			payment: None,
+		}))
+	}
+
+	fn lifecycle_event() -> EventEnvelope {
+		env(event_envelope::Event::ChannelReady(ldk_server_grpc::events::ChannelReady {
+			channel_id: "c".into(),
+			user_channel_id: "u".into(),
+			counterparty_node_id: None,
+		}))
+	}
+
+	fn commitment_event() -> EventEnvelope {
+		env(event_envelope::Event::ChannelCommitmentUpdated(
+			ldk_server_grpc::events::ChannelCommitmentUpdated::default(),
+		))
+	}
+
+	#[test]
+	fn test_event_filter_default_excludes_commitment() {
+		let f = EventFilter::from_request(&SubscribeEventsRequest::default());
+		assert!(f.permits(&payment_event()));
+		assert!(f.permits(&lifecycle_event()));
+		assert!(!f.permits(&commitment_event()));
+	}
+
+	#[test]
+	fn test_event_filter_only_commitment() {
+		let f = EventFilter::from_request(&SubscribeEventsRequest {
+			only: vec![EventKind::ChannelCommitment as i32],
+		});
+		assert!(!f.permits(&payment_event()));
+		assert!(!f.permits(&lifecycle_event()));
+		assert!(f.permits(&commitment_event()));
+	}
+
+	#[test]
+	fn test_event_filter_multiple_kinds() {
+		let f = EventFilter::from_request(&SubscribeEventsRequest {
+			only: vec![EventKind::Payment as i32, EventKind::ChannelCommitment as i32],
+		});
+		assert!(f.permits(&payment_event()));
+		assert!(!f.permits(&lifecycle_event()));
+		assert!(f.permits(&commitment_event()));
+	}
+
+	#[test]
+	fn test_event_filter_ignores_unknown_enum_values() {
+		// Unspecified / out-of-range enum values must not broaden the filter.
+		let f = EventFilter::from_request(&SubscribeEventsRequest {
+			only: vec![EventKind::Unspecified as i32, 999],
+		});
+		assert!(!f.permits(&payment_event()));
+		assert!(!f.permits(&lifecycle_event()));
+		assert!(!f.permits(&commitment_event()));
 	}
 }

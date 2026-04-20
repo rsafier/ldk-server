@@ -893,8 +893,41 @@ message DecodeOfferResponse {
   bool is_expired = 12;
 }
 
+// Request a point-in-time attestation bundle for some or all channels.
+message GetChannelAttestationsRequest {
+  // Optional channel-id filter (hex-encoded). Empty = all channels.
+  repeated string channel_ids = 1;
+}
+
+// Response: one ChannelCommitmentUpdated per channel, carrying the full
+// cryptographic bundle populated by `Node::export_channel_attestation`.
+message GetChannelAttestationsResponse {
+  repeated events.ChannelCommitmentUpdated attestations = 1;
+}
+
 // Subscribe to a stream of server events.
-message SubscribeEventsRequest {}
+message SubscribeEventsRequest {
+  // Optional event-kind filter. If empty, the server emits all event kinds
+  // EXCEPT EVENT_KIND_CHANNEL_COMMITMENT (which is opt-in because its rate
+  // can be much higher than the lifecycle / payment streams). Passing a
+  // non-empty list restricts the stream to those kinds (including
+  // EVENT_KIND_CHANNEL_COMMITMENT if explicitly requested).
+  repeated EventKind only = 1;
+}
+
+// Classes of events emitted on SubscribeEvents.
+enum EventKind {
+  EVENT_KIND_UNSPECIFIED = 0;
+  // PaymentReceived / PaymentSuccessful / PaymentFailed / PaymentClaimable /
+  // PaymentForwarded.
+  EVENT_KIND_PAYMENT = 1;
+  // ChannelPending / ChannelReady / ChannelClosed.
+  EVENT_KIND_CHANNEL_LIFECYCLE = 2;
+  // ChannelCommitmentUpdated — per-commitment attestation bundles.
+  // Excluded from the default subscription because a busy node can emit
+  // these many times per second.
+  EVENT_KIND_CHANNEL_COMMITMENT = 3;
+}
 
 service LightningNode {
   // Retrieve the latest node info.
@@ -973,4 +1006,8 @@ service LightningNode {
   rpc GraphGetNode(GraphGetNodeRequest) returns (GraphGetNodeResponse);
   // Subscribe to a stream of server events.
   rpc SubscribeEvents(SubscribeEventsRequest) returns (stream events.EventEnvelope);
+  // Return point-in-time attestation bundles for every (or a filtered subset of)
+  // open channel. Used by external compliance tooling to assemble signed
+  // channel-state artifacts for regulators.
+  rpc GetChannelAttestations(GetChannelAttestationsRequest) returns (GetChannelAttestationsResponse);
 }

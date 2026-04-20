@@ -58,6 +58,26 @@ fn generate_protos() {
 			"#[cfg_attr(feature = \"serde\", serde(serialize_with = \"crate::serde_utils::serialize_opt_bytes_hex\"))]",
 		)
 		.field_attribute(
+			"events.ChannelCommitmentBundle.holder_commitment_tx",
+			"#[cfg_attr(feature = \"serde\", serde(serialize_with = \"crate::serde_utils::serialize_bytes_hex\"))]",
+		)
+		.field_attribute(
+			"events.ChannelCommitmentBundle.counterparty_signature",
+			"#[cfg_attr(feature = \"serde\", serde(serialize_with = \"crate::serde_utils::serialize_bytes_hex\"))]",
+		)
+		.field_attribute(
+			"events.ChannelCommitmentBundle.holder_funding_pubkey",
+			"#[cfg_attr(feature = \"serde\", serde(serialize_with = \"crate::serde_utils::serialize_bytes_hex\"))]",
+		)
+		.field_attribute(
+			"events.ChannelCommitmentBundle.counterparty_funding_pubkey",
+			"#[cfg_attr(feature = \"serde\", serde(serialize_with = \"crate::serde_utils::serialize_bytes_hex\"))]",
+		)
+		.field_attribute(
+			"events.AttestationHtlc.payment_hash",
+			"#[cfg_attr(feature = \"serde\", serde(serialize_with = \"crate::serde_utils::serialize_bytes_hex\"))]",
+		)
+		.field_attribute(
 			"types.Payment.direction",
 			"#[cfg_attr(feature = \"serde\", serde(serialize_with = \"crate::serde_utils::serialize_payment_direction\"))]",
 		)

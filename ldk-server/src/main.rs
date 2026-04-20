@@ -50,7 +50,10 @@ use crate::service::NodeService;
 use crate::util::config::{load_config, ArgsConfig, ChainSource};
 use crate::util::logger::ServerLogger;
 use crate::util::metrics::Metrics;
-use crate::util::proto_adapter::{forwarded_payment_to_proto, payment_to_proto};
+use crate::util::proto_adapter::{
+	channel_closed_event_to_proto, channel_commitment_event, channel_pending_event_to_proto,
+	channel_ready_event_to_proto, forwarded_payment_to_proto, payment_to_proto,
+};
 use crate::util::systemd;
 use crate::util::tls::get_or_generate_tls_config;
 
@@ -325,20 +328,78 @@ fn main() {
 			select! {
 				event = event_node.next_event_async() => {
 					match event {
-						Event::ChannelPending { channel_id, counterparty_node_id, .. } => {
+						Event::ChannelPending {
+							channel_id,
+							user_channel_id,
+							counterparty_node_id,
+							funding_txo,
+							..
+						} => {
 							info!(
 								"CHANNEL_PENDING: {} from counterparty {}",
 								channel_id, counterparty_node_id
 							);
+							let pending = channel_pending_event_to_proto(
+								channel_id,
+								user_channel_id,
+								counterparty_node_id,
+								funding_txo,
+							);
+							if let Err(e) = event_sender.send(EventEnvelope {
+								event: Some(event_envelope::Event::ChannelPending(pending)),
+							}) {
+								debug!("No event subscribers connected, skipping event: {e}");
+							}
+							if let Some(commitment) =
+								channel_commitment_event(&event_node, channel_id)
+							{
+								if let Err(e) = event_sender.send(EventEnvelope {
+									event: Some(event_envelope::Event::ChannelCommitmentUpdated(
+										commitment,
+									)),
+								}) {
+									debug!(
+										"No event subscribers connected, skipping commitment event: {e}"
+									);
+								}
+							}
 							if let Err(e) = event_node.event_handled() {
 								error!("Failed to mark event as handled: {e}");
 							}
 						},
-						Event::ChannelReady { channel_id, counterparty_node_id, .. } => {
+						Event::ChannelReady {
+							channel_id,
+							user_channel_id,
+							counterparty_node_id,
+							..
+						} => {
 							info!(
 								"CHANNEL_READY: {} from counterparty {:?}",
 								channel_id, counterparty_node_id
 							);
+							let ready = channel_ready_event_to_proto(
+								channel_id,
+								user_channel_id,
+								counterparty_node_id,
+							);
+							if let Err(e) = event_sender.send(EventEnvelope {
+								event: Some(event_envelope::Event::ChannelReady(ready)),
+							}) {
+								debug!("No event subscribers connected, skipping event: {e}");
+							}
+							if let Some(commitment) =
+								channel_commitment_event(&event_node, channel_id)
+							{
+								if let Err(e) = event_sender.send(EventEnvelope {
+									event: Some(event_envelope::Event::ChannelCommitmentUpdated(
+										commitment,
+									)),
+								}) {
+									debug!(
+										"No event subscribers connected, skipping commitment event: {e}"
+									);
+								}
+							}
 							if let Err(e) = event_node.event_handled() {
 								error!("Failed to mark event as handled: {e}");
 							}
@@ -347,11 +408,28 @@ fn main() {
 								metrics.update_channels_count(false);
 							}
 						},
-						Event::ChannelClosed { channel_id, counterparty_node_id, .. } => {
+						Event::ChannelClosed {
+							channel_id,
+							user_channel_id,
+							counterparty_node_id,
+							reason,
+							..
+						} => {
 							info!(
 								"CHANNEL_CLOSED: {} from counterparty {:?}",
 								channel_id, counterparty_node_id
 							);
+							let closed = channel_closed_event_to_proto(
+								channel_id,
+								user_channel_id,
+								counterparty_node_id,
+								reason.map(|r| r.to_string()),
+							);
+							if let Err(e) = event_sender.send(EventEnvelope {
+								event: Some(event_envelope::Event::ChannelClosed(closed)),
+							}) {
+								debug!("No event subscribers connected, skipping event: {e}");
+							}
 							if let Err(e) = event_node.event_handled() {
 								error!("Failed to mark event as handled: {e}");
 							}
